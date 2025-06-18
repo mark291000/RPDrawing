@@ -38,7 +38,7 @@ if uploaded_files:
                 return text[:last_comma+3] + ')' + text[last_comma+4:]
         return text
 
-    progress_bar = st.progress(0, text="Đang xử lý ảnh...")
+    progress_bar = st.progress(0, text="Scanning...")
     total = len(uploaded_files)
 
     for idx, uploaded_file in enumerate(uploaded_files):
