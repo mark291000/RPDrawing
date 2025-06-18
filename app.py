@@ -5,13 +5,19 @@ import cv2
 import numpy as np
 import pandas as pd
 import re
+import time
 
-st.title("RPs Drawing Extractor Tool")
+st.set_page_config(page_title="RPs Drawing Extractor Tool", layout="centered")
+st.title("🧠 RPs Drawing Extractor Tool")
 
 uploaded_files = st.file_uploader("Choose at least one drawing to begin", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
 
+@st.cache_resource
+def get_reader():
+    return easyocr.Reader(['en'])
+
 if uploaded_files:
-    reader = easyocr.Reader(['en'])
+    reader = get_reader()
     results = []
 
     def color_distance(c1, c2):
@@ -32,14 +38,20 @@ if uploaded_files:
                 return text[:last_comma+3] + ')' + text[last_comma+4:]
         return text
 
-    for uploaded_file in uploaded_files:
+    progress_bar = st.progress(0, text="Đang xử lý ảnh...")
+    total = len(uploaded_files)
+
+    for idx, uploaded_file in enumerate(uploaded_files):
         file_stem = uploaded_file.name.split('.')[0]
         prefix = file_stem[:3].upper()
 
         image = cv2.imdecode(np.frombuffer(uploaded_file.read(), np.uint8), cv2.IMREAD_COLOR)
-
         if image is None:
             continue
+
+        if image.shape[1] > 1600:
+            scale = 1600 / image.shape[1]
+            image = cv2.resize(image, (0, 0), fx=scale, fy=scale)
 
         ocr_results = reader.readtext(image)
         candidates = []
@@ -85,8 +97,17 @@ if uploaded_files:
                     if '-' not in line and len(line) >= 10:
                         results.append((file, line))
 
+        percent = (idx + 1) / total
+        progress_bar.progress(percent, text=f"Processing {idx + 1}/{total} Drawings ({int(percent * 100)}%)")
+        time.sleep(0.1)
+
+    progress_bar.empty()
+
     df = pd.DataFrame(results, columns=["Drawing", "RPs Code"])
-    st.subheader("Result")
+    st.subheader("Result:")
     st.dataframe(df)
 else:
-    st.info("For any issues related to the app, please contact Mark Dang.")
+    st.info("👈 Hãy chọn ít nhất 1 ảnh để bắt đầu.")
+
+st.markdown("---")
+st.caption("📌 For any issues related to the app, please contact Mark Dang.")
