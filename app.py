@@ -106,8 +106,6 @@ if uploaded_files:
     df = pd.DataFrame(results, columns=["Drawing", "RPs Code"])
     st.subheader("Result:")
     st.dataframe(df)
-else:
-    st.info("👈 Hãy chọn ít nhất 1 ảnh để bắt đầu.")
 
 st.markdown("---")
 st.caption("📌 For any issues related to the app, please contact Mark Dang.")
