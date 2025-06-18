@@ -8,7 +8,7 @@ import re
 import time
 
 st.set_page_config(page_title="RPs Drawing Extractor Tool", layout="centered")
-st.title("🧠 RPs Drawing Extractor Tool")
+st.title("RPs Drawing Extractor Tool")
 
 uploaded_files = st.file_uploader("Choose at least one drawing to begin", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
 
