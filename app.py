@@ -87,7 +87,7 @@ if uploaded_files:
                 match = re.match(r"([A-Za-z0-9]+)\(([^)]+)\)([A-Za-z0-9]+)", line)
                 if match:
                     prefix_code, middle, suffix = match.groups()
-                    for part in middle.split(','):
+                    for part in re.split(r'[.,]', middle):
                         if '-' in part:
                             continue
                         code = f"{prefix_code}{part}{suffix}"
