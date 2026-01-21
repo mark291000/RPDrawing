@@ -68,57 +68,65 @@ def extract_fg_code(text):
 
 def calculate_fg_from_rps(fg_original, rps_code):
     """
-    Tính toán FG dựa trên công thức mới:
-    - Lấy từ trái sang phải FG gốc đến khi đủ 3 số thì dừng lại
-    - Sau đó ghép với 2 ký tự từ RPs Code (vị trí số đầu tiên + 3)
+    Tính toán FG dựa trên logic mới:
     
-    Ví dụ:
-    - FG: "12345-08" (5 ký tự trước -) -> Lấy "123" (3 số đầu) + 2 ký tự từ RPs
-    - FG: "123456-08" (6 ký tự trước -) -> Lấy "1234" (đủ 3 số rồi + 1 ký tự) + 2 ký tự từ RPs
-    - FG: "123-08" (3 ký tự trước -) -> Lấy "123" (đủ 3 số) + 2 ký tự từ RPs
+    1. Nếu phần trước dấu - có từ 5 ký tự trở lên:
+       - Lấy toàn bộ FG, bỏ phần text và dấu -
+       - Ví dụ: "12345-08" -> "1234508"
+       
+    2. Nếu phần trước dấu - có từ 4 ký tự trở xuống:
+       - Lấy toàn bộ phần trước dấu -
+       - Thay dấu - bằng 2 ký tự từ RPs Code (vị trí số đầu + 4)
+       - Thêm 2 ký tự sau dấu - từ FG gốc
+       - Ví dụ: "123-08" + RPs "ABC1234567" -> "123" + "45" + "08" = "12345 08"
+    
+    Logic lấy 2 ký tự từ RPs Code:
+    - ABC1234567: Số đầu = vị trí 3 (số 1), lấy vị trí 3+4=7 -> "45"
+    - 1236789: Số đầu = vị trí 0 (số 1), lấy vị trí 0+4=4 -> "67"
     """
     if not fg_original or not rps_code or '-' not in fg_original:
         return fg_original
     
-    # Tách phần trước dấu - đầu tiên
+    # Tách FG theo dấu - đầu tiên
     parts = fg_original.split('-', 1)
-    prefix = parts[0]
+    prefix = parts[0]  # Phần trước dấu -
+    suffix = parts[1] if len(parts) > 1 else ""  # Phần sau dấu -
     
-    # Đếm số lượng chữ số từ trái sang phải cho đến khi đủ 3 số
-    digit_count = 0
-    result_prefix = ""
+    # Lấy 2 ký tự đầu từ suffix (bỏ qua khoảng trắng và text)
+    suffix_digits = re.match(r'^\s*([A-Za-z0-9]{0,2})', suffix)
+    suffix_2chars = suffix_digits.group(1) if suffix_digits else ""
     
-    for char in prefix:
-        result_prefix += char
-        if char.isdigit():
-            digit_count += 1
-            if digit_count >= 3:
+    # Kiểm tra độ dài phần trước dấu -
+    if len(prefix) >= 5:
+        # TH1: Từ 5 ký tự trở lên - Lấy toàn bộ, bỏ dấu -
+        result = prefix + suffix_2chars
+        return result
+    else:
+        # TH2: Từ 4 ký tự trở xuống - Thay dấu - bằng 2 ký tự từ RPs Code
+        
+        # Tìm vị trí đầu tiên của số (0-9) trong RPs Code
+        first_digit_pos = None
+        for i, char in enumerate(rps_code):
+            if char.isdigit():
+                first_digit_pos = i
                 break
-    
-    # Tìm vị trí đầu tiên của số (0-9) trong RPs Code
-    first_digit_pos = None
-    for i, char in enumerate(rps_code):
-        if char.isdigit():
-            first_digit_pos = i
-            break
-    
-    if first_digit_pos is None:
-        return fg_original
-    
-    # Tính vị trí cần lấy: first_digit_pos + 3
-    extract_pos = first_digit_pos + 3
-    
-    # Kiểm tra xem có đủ ký tự không
-    if extract_pos + 2 > len(rps_code):
-        return fg_original
-    
-    # Lấy 2 ký tự từ vị trí đó
-    replacement = rps_code[extract_pos:extract_pos + 2]
-    
-    # Ghép lại: phần prefix (đã lấy đủ 3 số) + 2 ký tự từ RPs
-    result = result_prefix + replacement
-    
-    return result
+        
+        if first_digit_pos is None:
+            return fg_original
+        
+        # Tính vị trí cần lấy: first_digit_pos + 4 (lấy ký tự thứ 5 và 6 sau số đầu tiên)
+        extract_pos = first_digit_pos + 4
+        
+        # Kiểm tra xem có đủ ký tự không
+        if extract_pos + 2 > len(rps_code):
+            return fg_original
+        
+        # Lấy 2 ký tự từ RPs Code
+        rps_2chars = rps_code[extract_pos:extract_pos + 2]
+        
+        # Ghép: prefix + 2 ký tự từ RPs + 2 ký tự sau dấu - từ FG gốc
+        result = prefix + rps_2chars + suffix_2chars
+        return result
 
 def find_ashley_fg(ocr_results):
     """Tìm text nằm dưới chữ ASHLEY và trích xuất FG code"""
