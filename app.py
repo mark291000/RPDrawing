@@ -68,16 +68,32 @@ def extract_fg_code(text):
 
 def calculate_fg_from_rps(fg_original, rps_code):
     """
-    Tính toán FG dựa trên công thức Excel:
-    =SUBSTITUTE(FG,"-",MID(RPs Code,AGGREGATE(15,6,SEARCH({0,1,2,3,4,5,6,7,8,9},RPs Code),1)+3,2))
+    Tính toán FG dựa trên công thức mới:
+    - Lấy từ trái sang phải FG gốc đến khi đủ 3 số thì dừng lại
+    - Sau đó ghép với 2 ký tự từ RPs Code (vị trí số đầu tiên + 3)
     
-    Logic:
-    1. Tìm vị trí đầu tiên của số trong RPs Code
-    2. Lấy 2 ký tự từ vị trí đó + 3
-    3. Thay thế dấu "-" trong FG bằng 2 ký tự đó
+    Ví dụ:
+    - FG: "12345-08" (5 ký tự trước -) -> Lấy "123" (3 số đầu) + 2 ký tự từ RPs
+    - FG: "123456-08" (6 ký tự trước -) -> Lấy "1234" (đủ 3 số rồi + 1 ký tự) + 2 ký tự từ RPs
+    - FG: "123-08" (3 ký tự trước -) -> Lấy "123" (đủ 3 số) + 2 ký tự từ RPs
     """
     if not fg_original or not rps_code or '-' not in fg_original:
         return fg_original
+    
+    # Tách phần trước dấu - đầu tiên
+    parts = fg_original.split('-', 1)
+    prefix = parts[0]
+    
+    # Đếm số lượng chữ số từ trái sang phải cho đến khi đủ 3 số
+    digit_count = 0
+    result_prefix = ""
+    
+    for char in prefix:
+        result_prefix += char
+        if char.isdigit():
+            digit_count += 1
+            if digit_count >= 3:
+                break
     
     # Tìm vị trí đầu tiên của số (0-9) trong RPs Code
     first_digit_pos = None
@@ -99,8 +115,8 @@ def calculate_fg_from_rps(fg_original, rps_code):
     # Lấy 2 ký tự từ vị trí đó
     replacement = rps_code[extract_pos:extract_pos + 2]
     
-    # Thay thế dấu "-" đầu tiên trong FG
-    result = fg_original.replace('-', replacement, 1)
+    # Ghép lại: phần prefix (đã lấy đủ 3 số) + 2 ký tự từ RPs
+    result = result_prefix + replacement
     
     return result
 
