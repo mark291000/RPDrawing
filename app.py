@@ -1,4 +1,3 @@
-
 import streamlit as st
 import easyocr
 import cv2
@@ -16,27 +15,109 @@ uploaded_files = st.file_uploader("Choose at least one drawing to begin", type=[
 def get_reader():
     return easyocr.Reader(['en'])
 
+def color_distance(c1, c2):
+    return np.linalg.norm(np.array(c1, dtype=int) - np.array(c2, dtype=int))
+
+def get_center_color(image, bbox):
+    (x1, y1), _, (x3, y3), _ = bbox
+    x_center = int((x1 + x3) / 2)
+    y_center = int((y1 + y3) / 2)
+    if y_center >= image.shape[0] or x_center >= image.shape[1]:
+        return None
+    return image[y_center, x_center]
+
+def fix_missing_parenthesis(text):
+    if '(' in text and ')' not in text:
+        last_comma = text.rfind(',')
+        if last_comma != -1 and len(text) > last_comma + 3:
+            return text[:last_comma+3] + ')' + text[last_comma+4:]
+    return text
+
+def extract_fg_code(text):
+    """
+    Lấy toàn bộ chuỗi FG nhưng loại bỏ phần text phía sau dấu -
+    Ví dụ: '102-08 Greg' -> '102-08'
+    Ví dụ: 'ABC-123-XYZ More Text' -> 'ABC-123-XYZ'
+    Ví dụ: '102-08' -> '102-08'
+    """
+    if not text:
+        return ""
+    
+    text = text.strip()
+    
+    # Tìm vị trí dấu - cuối cùng
+    last_dash_index = text.rfind('-')
+    
+    if last_dash_index == -1:
+        # Không có dấu -, trả về text gốc
+        return text
+    
+    # Tìm vị trí ký tự không phải số/chữ sau dấu - cuối cùng
+    after_dash = text[last_dash_index + 1:]
+    
+    # Tìm phần số/chữ ngay sau dấu - (bỏ qua khoảng trắng)
+    match = re.match(r'^\s*([A-Za-z0-9]+)', after_dash)
+    
+    if match:
+        # Lấy phần từ đầu đến hết phần số/chữ sau dấu - cuối cùng
+        end_position = last_dash_index + 1 + match.end()
+        return text[:end_position].strip()
+    
+    # Nếu không match được, trả về đến dấu - cuối
+    return text[:last_dash_index + 1].strip()
+
+def find_ashley_fg(ocr_results):
+    """Tìm text nằm dưới chữ ASHLEY và trích xuất FG code"""
+    ashley_boxes = []
+    
+    # Tìm tất cả các vị trí có chữ ASHLEY
+    for bbox, text, _ in ocr_results:
+        if 'ASHLEY' in text.upper():
+            ashley_boxes.append(bbox)
+    
+    if not ashley_boxes:
+        return None
+    
+    # Với mỗi ASHLEY, tìm text ngay bên dưới
+    fg_candidates = []
+    for ashley_bbox in ashley_boxes:
+        (x1_a, y1_a), _, (x3_a, y3_a), _ = ashley_bbox
+        ashley_bottom = y3_a
+        ashley_x_center = (x1_a + x3_a) / 2
+        
+        # Tìm text nằm dưới ASHLEY (trong khoảng hợp lý)
+        min_distance = float('inf')
+        best_fg = None
+        
+        for bbox, text, _ in ocr_results:
+            (x1, y1), _, (x3, y3), _ = bbox
+            text_top = y1
+            text_x_center = (x1 + x3) / 2
+            
+            # Kiểm tra text có nằm dưới ASHLEY không
+            if text_top > ashley_bottom:
+                # Kiểm tra căn chỉnh theo chiều ngang (có nằm gần cùng cột không)
+                horizontal_distance = abs(text_x_center - ashley_x_center)
+                vertical_distance = text_top - ashley_bottom
+                
+                # Text phải nằm gần dưới ASHLEY và căn chỉnh theo cột
+                if horizontal_distance < 100 and vertical_distance < 150:
+                    total_distance = vertical_distance + horizontal_distance
+                    if total_distance < min_distance:
+                        min_distance = total_distance
+                        best_fg = text.strip()
+        
+        if best_fg:
+            fg_candidates.append(best_fg)
+    
+    # Trả về FG đầu tiên tìm được, đã được trích xuất
+    if fg_candidates:
+        return extract_fg_code(fg_candidates[0])
+    return None
+
 if uploaded_files:
     reader = get_reader()
     results = []
-
-    def color_distance(c1, c2):
-        return np.linalg.norm(np.array(c1, dtype=int) - np.array(c2, dtype=int))
-
-    def get_center_color(image, bbox):
-        (x1, y1), _, (x3, y3), _ = bbox
-        x_center = int((x1 + x3) / 2)
-        y_center = int((y1 + y3) / 2)
-        if y_center >= image.shape[0] or x_center >= image.shape[1]:
-            return None
-        return image[y_center, x_center]
-
-    def fix_missing_parenthesis(text):
-        if '(' in text and ')' not in text:
-            last_comma = text.rfind(',')
-            if last_comma != -1 and len(text) > last_comma + 3:
-                return text[:last_comma+3] + ')' + text[last_comma+4:]
-        return text
 
     progress_bar = st.progress(0, text="Scanning...")
     total = len(uploaded_files)
@@ -54,6 +135,10 @@ if uploaded_files:
             image = cv2.resize(image, (0, 0), fx=scale, fy=scale)
 
         ocr_results = reader.readtext(image)
+        
+        # Tìm FG code (text dưới ASHLEY)
+        fg_code = find_ashley_fg(ocr_results)
+        
         candidates = []
 
         for bbox, text, _ in ocr_results:
@@ -92,10 +177,10 @@ if uploaded_files:
                             continue
                         code = f"{prefix_code}{part}{suffix}"
                         if len(code) >= 10:
-                            results.append((file, code))
+                            results.append((file, fg_code if fg_code else "", code))
                 else:
                     if '-' not in line and len(line) >= 10:
-                        results.append((file, line))
+                        results.append((file, fg_code if fg_code else "", line))
 
         percent = (idx + 1) / total
         progress_bar.progress(percent, text=f"Processing {idx + 1}/{total} Drawings ({int(percent * 100)}%)")
@@ -103,9 +188,20 @@ if uploaded_files:
 
     progress_bar.empty()
 
-    df = pd.DataFrame(results, columns=["Drawing", "RPs Code"])
+    # Tạo DataFrame với thứ tự cột: Drawing, FG, RPs Code
+    df = pd.DataFrame(results, columns=["Drawing", "FG", "RPs Code"])
+    
     st.subheader("Result:")
-    st.dataframe(df)
+    st.dataframe(df, use_container_width=True)
+    
+    # Nút download CSV
+    csv = df.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="📥 Download CSV",
+        data=csv,
+        file_name='rps_extraction_results.csv',
+        mime='text/csv',
+    )
 
 st.markdown("---")
 st.caption("📌 For any issues related to the app, please contact Mark Dang.")
