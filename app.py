@@ -66,6 +66,44 @@ def extract_fg_code(text):
     # Nếu không match được, trả về đến dấu - cuối
     return text[:last_dash_index + 1].strip()
 
+def calculate_fg_from_rps(fg_original, rps_code):
+    """
+    Tính toán FG dựa trên công thức Excel:
+    =SUBSTITUTE(FG,"-",MID(RPs Code,AGGREGATE(15,6,SEARCH({0,1,2,3,4,5,6,7,8,9},RPs Code),1)+3,2))
+    
+    Logic:
+    1. Tìm vị trí đầu tiên của số trong RPs Code
+    2. Lấy 2 ký tự từ vị trí đó + 3
+    3. Thay thế dấu "-" trong FG bằng 2 ký tự đó
+    """
+    if not fg_original or not rps_code or '-' not in fg_original:
+        return fg_original
+    
+    # Tìm vị trí đầu tiên của số (0-9) trong RPs Code
+    first_digit_pos = None
+    for i, char in enumerate(rps_code):
+        if char.isdigit():
+            first_digit_pos = i
+            break
+    
+    if first_digit_pos is None:
+        return fg_original
+    
+    # Tính vị trí cần lấy: first_digit_pos + 3
+    extract_pos = first_digit_pos + 3
+    
+    # Kiểm tra xem có đủ ký tự không
+    if extract_pos + 2 > len(rps_code):
+        return fg_original
+    
+    # Lấy 2 ký tự từ vị trí đó
+    replacement = rps_code[extract_pos:extract_pos + 2]
+    
+    # Thay thế dấu "-" đầu tiên trong FG
+    result = fg_original.replace('-', replacement, 1)
+    
+    return result
+
 def find_ashley_fg(ocr_results):
     """Tìm text nằm dưới chữ ASHLEY và trích xuất FG code"""
     ashley_boxes = []
@@ -137,7 +175,7 @@ if uploaded_files:
         ocr_results = reader.readtext(image)
         
         # Tìm FG code (text dưới ASHLEY)
-        fg_code = find_ashley_fg(ocr_results)
+        fg_code_original = find_ashley_fg(ocr_results)
         
         candidates = []
 
@@ -177,10 +215,14 @@ if uploaded_files:
                             continue
                         code = f"{prefix_code}{part}{suffix}"
                         if len(code) >= 10:
-                            results.append((file, fg_code if fg_code else "", code))
+                            # Tính FG từ RPs Code
+                            fg_final = calculate_fg_from_rps(fg_code_original if fg_code_original else "", code)
+                            results.append((file, fg_final, code))
                 else:
                     if '-' not in line and len(line) >= 10:
-                        results.append((file, fg_code if fg_code else "", line))
+                        # Tính FG từ RPs Code
+                        fg_final = calculate_fg_from_rps(fg_code_original if fg_code_original else "", line)
+                        results.append((file, fg_final, line))
 
         percent = (idx + 1) / total
         progress_bar.progress(percent, text=f"Processing {idx + 1}/{total} Drawings ({int(percent * 100)}%)")
