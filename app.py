@@ -115,7 +115,7 @@ def calculate_fg_from_rps(fg_original, rps_code):
             return fg_original
         
         # Tính vị trí cần lấy: first_digit_pos + 4 (lấy ký tự thứ 5 và 6 sau số đầu tiên)
-        extract_pos = first_digit_pos + 4
+        extract_pos = first_digit_pos + 3
         
         # Kiểm tra xem có đủ ký tự không
         if extract_pos + 2 > len(rps_code):
