@@ -5,8 +5,9 @@ import numpy as np
 import pandas as pd
 import re
 import time
-from pdf2image import convert_from_bytes
+import fitz  # PyMuPDF
 from PIL import Image
+import io
 
 st.set_page_config(page_title="RPs Drawing Extractor Tool", layout="centered")
 st.title("RPs Drawing Extractor Tool")
@@ -180,9 +181,26 @@ def find_ashley_fg(ocr_results):
     return None
 
 def pdf_to_images(pdf_bytes):
-    """Convert PDF bytes to list of PIL images"""
+    """Convert PDF bytes to list of PIL images using PyMuPDF"""
+    images = []
     try:
-        images = convert_from_bytes(pdf_bytes, dpi=200)
+        # Open PDF from bytes
+        pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")
+        
+        # Iterate through pages
+        for page_num in range(pdf_document.page_count):
+            page = pdf_document[page_num]
+            
+            # Render page to image (matrix for 200 DPI)
+            mat = fitz.Matrix(200/72, 200/72)  # 200 DPI
+            pix = page.get_pixmap(matrix=mat)
+            
+            # Convert to PIL Image
+            img_data = pix.tobytes("png")
+            pil_image = Image.open(io.BytesIO(img_data))
+            images.append(pil_image)
+        
+        pdf_document.close()
         return images
     except Exception as e:
         st.error(f"Error converting PDF: {str(e)}")
